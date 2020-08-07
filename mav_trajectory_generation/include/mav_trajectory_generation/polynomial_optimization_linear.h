@@ -48,6 +48,8 @@ class PolynomialOptimization {
 
  public:
   enum { N = _N };
+  /// The following constant is coming from Pontryagin's Minimum principle.
+  /// Reference: Section 2 of https://arxiv.org/pdf/1709.05401.pdf
   static constexpr int kHighestDerivativeToOptimize = N / 2 - 1;
   typedef Eigen::Matrix<double, N, N> SquareMatrix;
   typedef std::vector<SquareMatrix, Eigen::aligned_allocator<SquareMatrix> >

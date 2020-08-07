@@ -24,121 +24,29 @@
 #include <yaml-cpp/yaml.h>
 #include <fstream>
 
-const std::string kSegmentsKey = "segments";
-const std::string kNumCoefficientsKey = "N";
-const std::string kDimKey = "D";
-const std::string kSegmentTimeKey = "time";
-const std::string kCoefficientsKey = "coefficients";
+const std::string kSegments = "segments";
+const std::string kNumCoefficients = "N";
+const std::string kDim = "D";
+const std::string kSegmentTime = "time";
+const std::string kCoefficients = "coefficients";
 
 namespace mav_trajectory_generation {
-
-YAML::Node coefficientsToYaml(const Eigen::VectorXd& coefficients) {
-  YAML::Node node(YAML::NodeType::Sequence);
-  for (size_t i = 0; i < coefficients.size(); ++i)
-    node.push_back(coefficients(i));
-  node.SetStyle(YAML::EmitterStyle::Flow);
-  return node;
-}
-
-YAML::Node segmentToYaml(const Segment& segment) {
-  YAML::Node node;
-  node[kNumCoefficientsKey] = segment.N();
-  node[kDimKey] = segment.D();
-  node[kSegmentTimeKey] = segment.getTimeNSec();
-
-  for (size_t i = 0; i < segment.D(); ++i)
-    node[kCoefficientsKey].push_back(
-        coefficientsToYaml(segment[i].getCoefficients()));
-
-  return node;
-}
-
-YAML::Node segmentsToYaml(const Segment::Vector& segments) {
-  YAML::Node node;
-  for (const mav_trajectory_generation::Segment& segment : segments)
-    node[kSegmentsKey].push_back(segmentToYaml(segment));
-
-  return node;
-}
-
-YAML::Node trajectoryToYaml(const Trajectory& trajectory) {
-  Segment::Vector segments;
-  trajectory.getSegments(&segments);
-  return segmentsToYaml(segments);
-}
-
-bool coefficientsFromYaml(const YAML::Node& node,
-                          Eigen::VectorXd* coefficients) {
-  CHECK_NOTNULL(coefficients);
-  if (!node.IsSequence()) return false;
-  *coefficients = Eigen::VectorXd(node.size());
-  for (std::size_t i = 0; i < node.size(); ++i) {
-    (*coefficients)(i) = node[i].as<double>();
-  }
-  return true;
-}
-
-bool segmentFromYaml(const YAML::Node& node, Segment* segment) {
-  CHECK_NOTNULL(segment);
-
-  if (!node[kNumCoefficientsKey]) return false;
-  if (!node[kDimKey]) return false;
-  if (!node[kSegmentTimeKey]) return false;
-  if (!node[kCoefficientsKey]) return false;
-  if (!node[kCoefficientsKey].IsSequence()) return false;
-
-  *segment =
-      Segment(node[kNumCoefficientsKey].as<int>(), node[kDimKey].as<int>());
-
-  for (size_t i = 0; i < segment->D(); ++i) {
-    Eigen::VectorXd coeffs;
-    if (!coefficientsFromYaml(node[kCoefficientsKey][i], &coeffs)) return false;
-    (*segment)[i] = coeffs;
-  }
-
-  segment->setTimeNSec(node[kSegmentTimeKey].as<uint64_t>());
-
-  return true;
-}
-
-bool segmentsFromYaml(const YAML::Node& node, Segment::Vector* segments) {
-  CHECK_NOTNULL(segments);
-  if (!node.IsSequence()) return false;
-
-  segments->resize(node.size(), Segment(0, 0));
-  for (size_t i = 0; i < node.size(); ++i) {
-    if (!segmentFromYaml(node[i], &(*segments)[i])) return false;
-  }
-
-  return true;
-}
-
-bool trajectoryFromYaml(const YAML::Node& node, Trajectory* trajectory) {
-  CHECK_NOTNULL(trajectory);
-
-  Segment::Vector segments;
-  if (!segmentsFromYaml(node[kSegmentsKey], &segments)) return false;
-  trajectory->setSegments(segments);
-
-  return true;
-}
-
 bool segmentsToFile(
     const std::string& filename,
     const mav_trajectory_generation::Segment::Vector& segments) {
   YAML::Emitter out;
   out << YAML::BeginMap;
-  out << YAML::Key << kSegmentsKey;
+  out << YAML::Key << kSegments;
   out << YAML::BeginSeq;
   for (const mav_trajectory_generation::Segment& segment : segments) {
     out << YAML::BeginMap;
     // Header.
-    out << YAML::Key << kNumCoefficientsKey << YAML::Value << segment.N();
-    out << YAML::Key << kDimKey << YAML::Value << segment.D();
-    out << YAML::Key << kSegmentTimeKey << YAML::Value << segment.getTimeNSec()
+    out << YAML::Key << kNumCoefficients << YAML::Value << segment.N();
+    out << YAML::Key << kDim << YAML::Value << segment.D();
+    out << YAML::Key << kSegmentTime << YAML::Value << segment.getTimeNSec()
         << YAML::Comment("[ns]");
     // Coefficients.
-    out << YAML::Key << kCoefficientsKey;
+    out << YAML::Key << kCoefficients;
     out << YAML::BeginSeq;
     for (size_t i = 0; i < segment.D(); i++) {
       out << YAML::Flow;  // List output format.
@@ -180,29 +88,28 @@ bool segmentsFromFile(const std::string& filename,
   // Parse YAML.
   YAML::Node node = YAML::LoadFile(filename);
 
-  if (node[kSegmentsKey]) {
-    const YAML::Node& segments_yaml = node[kSegmentsKey];
+  if (node[kSegments]) {
+    const YAML::Node& segments_yaml = node[kSegments];
     for (size_t i = 0; i < segments_yaml.size(); i++) {
-      if (segments_yaml[i][kNumCoefficientsKey] && segments_yaml[i][kDimKey] &&
-          segments_yaml[i][kSegmentTimeKey] &&
-          segments_yaml[i][kCoefficientsKey]) {
+      if (segments_yaml[i][kNumCoefficients] && segments_yaml[i][kDim] &&
+          segments_yaml[i][kSegmentTime] && segments_yaml[i][kCoefficients]) {
         // Header.
-        int N = segments_yaml[i][kNumCoefficientsKey].as<int>();
-        int D = segments_yaml[i][kDimKey].as<int>();
+        int N = segments_yaml[i][kNumCoefficients].as<int>();
+        int D = segments_yaml[i][kDim].as<int>();
         mav_trajectory_generation::Segment segment(N, D);
-        uint64_t t = segments_yaml[i][kSegmentTimeKey].as<uint64_t>();
+        uint64_t t = segments_yaml[i][kSegmentTime].as<uint64_t>();
         segment.setTimeNSec(t);
         // Coefficients.
-        if (segments_yaml[i][kCoefficientsKey].size() != D) {
+        if (segments_yaml[i][kCoefficients].size() != D) {
           return false;  // Coefficients and dimensions do not coincide.
         }
         for (size_t j = 0; j < D; j++) {
-          if (segments_yaml[i][kCoefficientsKey][j].size() != N) {
+          if (segments_yaml[i][kCoefficients][j].size() != N) {
             return false;  // Number of coefficients does no coincide.
           }
           Eigen::VectorXd coeffs(N);
           for (size_t k = 0; k < N; k++) {
-            coeffs(k) = segments_yaml[i][kCoefficientsKey][j][k].as<double>();
+            coeffs(k) = segments_yaml[i][kCoefficients][j][k].as<double>();
           }
           segment[j] = coeffs;
         }
@@ -222,22 +129,20 @@ bool sampledTrajectoryStatesToFile(const std::string& filename,
                                    const Trajectory& trajectory) {
   // Print to file for matlab
   const double sampling_time = 0.01;
-  mav_msgs::EigenTrajectoryPoint::Vector trajectory_points;
-  bool success =
-      sampleWholeTrajectory(trajectory, sampling_time, &trajectory_points);
+  mav_msgs::EigenTrajectoryPoint::Vector flat_states;
+  bool success = sampleWholeTrajectory(trajectory, sampling_time, &flat_states);
   if (!success) {
     return false;
   }
 
-  // Layout: [t, x, y, z, vx, vy, vz, jx, jy, jz, sx, sy, sz, qw, qx, qy, qz,
-  // wx, wy, wz, ax, ay, az, tm]
-  const unsigned int dim = 3;
-  Eigen::MatrixXd output(trajectory_points.size(), 8 * dim + 3);
+  // Layout: [t, x, y, z, vx, vy, vz, jx, jy, jz, sx, sy, sz, tm]
+  const unsigned int dim = trajectory.D();
+  Eigen::MatrixXd output(flat_states.size(), 5 * dim + 2);
   output.setZero();
-  for (int i = 0; i < trajectory_points.size(); ++i) {
-    const mav_msgs::EigenTrajectoryPoint state = trajectory_points[i];
+  for (int i = 0; i < flat_states.size(); ++i) {
+    const mav_msgs::EigenTrajectoryPoint state = flat_states[i];
 
-    if (trajectory.D() == 4) {
+    if (trajectory.D() > 3) {
       double yaw = state.getYaw();
       double yaw_rate = state.getYawRate();
       double yaw_acc = state.getYawAcc();
@@ -250,11 +155,6 @@ bool sampledTrajectoryStatesToFile(const std::string& filename,
       output.row(i).segment(1 + 2 * dim, dim) = state.acceleration_W;
       output.row(i).segment(1 + 3 * dim, dim) = state.jerk_W;
       output.row(i).segment(1 + 4 * dim, dim) = state.snap_W;
-      output.row(i).segment(1 + 5 * dim, dim + 1) =
-          Eigen::Vector4d(state.orientation_W_B.w(), state.orientation_W_B.x(),
-                          state.orientation_W_B.y(), state.orientation_W_B.z());
-      output.row(i).segment(2 + 6 * dim, dim) = state.angular_velocity_W;
-      output.row(i).segment(2 + 7 * dim, dim) = state.angular_acceleration_W;
     }
   }
 
@@ -265,7 +165,7 @@ bool sampledTrajectoryStatesToFile(const std::string& filename,
   for (int j = 0; j < segments.size(); ++j) {
     double segment_time = segments[j].getTime();
     current_segment_time += segment_time;
-    output(j, 2 + 8 * dim) = current_segment_time;
+    output(j, 1 + 5 * dim) = current_segment_time;
   }
 
   std::fstream fs;

@@ -22,8 +22,8 @@
 #include <mav_msgs/conversions.h>
 #include <mav_visualization/helpers.h>
 
-#include "mav_trajectory_generation/trajectory_sampling.h"
 #include "mav_trajectory_generation_ros/ros_visualization.h"
+#include "mav_trajectory_generation/trajectory_sampling.h"
 
 namespace mav_trajectory_generation {
 
@@ -71,40 +71,13 @@ void drawMavTrajectory(const Trajectory& trajectory, double distance,
                                         dummy_marker, marker_array);
 }
 
-void drawMavSampledTrajectorybyTime(
-    const mav_msgs::EigenTrajectoryPoint::Vector& trajectory_points, double dt,
-    const std::string& frame_id, visualization_msgs::MarkerArray* marker_array){
-
-      mav_msgs::EigenTrajectoryPointVector filtered_vector;
-      uint32_t dt_ns = ((uint32_t)(dt * 1e9));
-      uint32_t last_time_ns = 0;
-      filtered_vector.push_back(trajectory_points.front());
-      for(size_t i = 1; i < trajectory_points.size() -1; i++){
-        uint32_t current_time_ns = trajectory_points[i].time_from_start_ns;
-
-        if(current_time_ns - last_time_ns >= dt_ns){
-          filtered_vector.push_back(trajectory_points[i]);
-          last_time_ns = current_time_ns;
-        }
-
-      }
-
-      filtered_vector.push_back(trajectory_points.back());
-
-      // filter by time.
-      mav_visualization::MarkerGroup dummy_marker;
-      return drawMavSampledTrajectoryWithMavMarker(filtered_vector, 0.0, frame_id,
-                                               dummy_marker, marker_array);
-    }
-
-
 void drawMavSampledTrajectory(
-    const mav_msgs::EigenTrajectoryPoint::Vector& trajectory_points, double distance,
+    const mav_msgs::EigenTrajectoryPoint::Vector& flat_states, double distance,
     const std::string& frame_id,
     visualization_msgs::MarkerArray* marker_array) {
   // This is just an empty extra marker that doesn't draw anything.
   mav_visualization::MarkerGroup dummy_marker;
-  return drawMavSampledTrajectoryWithMavMarker(trajectory_points, distance, frame_id,
+  return drawMavSampledTrajectoryWithMavMarker(flat_states, distance, frame_id,
                                                dummy_marker, marker_array);
 }
 
@@ -113,20 +86,20 @@ void drawMavTrajectoryWithMavMarker(
     const mav_visualization::MarkerGroup& additional_marker,
     visualization_msgs::MarkerArray* marker_array) {
   // Sample the trajectory.
-  mav_msgs::EigenTrajectoryPoint::Vector trajectory_points;
+  mav_msgs::EigenTrajectoryPoint::Vector flat_states;
 
   bool success =
-      sampleWholeTrajectory(trajectory, kDefaultSamplingTime, &trajectory_points);
+      sampleWholeTrajectory(trajectory, kDefaultSamplingTime, &flat_states);
   if (!success) {
     return;
   }
   // Draw the trajectory.
-  drawMavSampledTrajectoryWithMavMarker(trajectory_points, distance, frame_id,
+  drawMavSampledTrajectoryWithMavMarker(flat_states, distance, frame_id,
                                         additional_marker, marker_array);
 }
 
 void drawMavSampledTrajectoryWithMavMarker(
-    const mav_msgs::EigenTrajectoryPoint::Vector& trajectory_points, double distance,
+    const mav_msgs::EigenTrajectoryPoint::Vector& flat_states, double distance,
     const std::string& frame_id,
     const mav_visualization::MarkerGroup& additional_marker,
     visualization_msgs::MarkerArray* marker_array) {
@@ -140,16 +113,16 @@ void drawMavSampledTrajectoryWithMavMarker(
   line_strip.ns = "path";
 
   double accumulated_distance = 0.0;
+  double derivative_arrow_scale = 0.3; /// @NOTE: Default scale was 0.1. I changed to 0.15
   Eigen::Vector3d last_position = Eigen::Vector3d::Zero();
-  for (size_t i = 0; i < trajectory_points.size(); ++i) {
-    const mav_msgs::EigenTrajectoryPoint& trajectory_point = trajectory_points[i];
+  for (size_t i = 0; i < flat_states.size(); ++i) {
+    const mav_msgs::EigenTrajectoryPoint& flat_state = flat_states[i];
 
-    accumulated_distance += (last_position - trajectory_point.position_W).norm();
+    accumulated_distance += (last_position - flat_state.position_W).norm();
     if (accumulated_distance > distance) {
       accumulated_distance = 0.0;
       mav_msgs::EigenMavState mav_state;
-      mav_msgs::EigenMavStateFromEigenTrajectoryPoint(trajectory_point, &mav_state);
-      mav_state.orientation_W_B = trajectory_point.orientation_W_B;
+      mav_msgs::EigenMavStateFromEigenTrajectoryPoint(flat_state, &mav_state);
 
       visualization_msgs::MarkerArray axes_arrows;
       mav_visualization::drawAxesArrows(mav_state.position_W,
@@ -159,16 +132,18 @@ void drawMavSampledTrajectoryWithMavMarker(
 
       visualization_msgs::Marker arrow;
       mav_visualization::drawArrowPoints(
-          trajectory_point.position_W,
-          trajectory_point.position_W + trajectory_point.acceleration_W,
-          mav_visualization::Color((190.0 / 255.0), (81.0 / 255.0),
-                                   (80.0 / 255.0)),
-          0.3, &arrow);
+          flat_state.position_W,
+          flat_state.position_W + flat_state.acceleration_W * derivative_arrow_scale,
+//          mav_visualization::Color((190.0 / 255.0), (81.0 / 255.0),
+//                                   (80.0 / 255.0)),
+          mav_visualization::Color((85.0 / 255.0), (85.0 / 255.0),
+                                   (255.0 / 255.0)),
+          0.45, &arrow); /// @NOTE: default diameter was 0.3. I changed to 0.45
       arrow.ns = positionDerivativeToString(derivative_order::ACCELERATION);
       marker_array->markers.push_back(arrow);
 
       mav_visualization::drawArrowPoints(
-          trajectory_point.position_W, trajectory_point.position_W + trajectory_point.velocity_W,
+          flat_state.position_W, flat_state.position_W + flat_state.velocity_W * derivative_arrow_scale,
           mav_visualization::Color((80.0 / 255.0), (172.0 / 255.0),
                                    (196.0 / 255.0)),
           0.3, &arrow);
@@ -179,7 +154,7 @@ void drawMavSampledTrajectoryWithMavMarker(
       tmp_marker.transform(mav_state.position_W, mav_state.orientation_W_B);
       tmp_marker.getMarkers(marker_array->markers, 1.0, true);
     }
-    last_position = trajectory_point.position_W;
+    last_position = flat_state.position_W;
     geometry_msgs::Point last_position_msg;
     tf::pointEigenToMsg(last_position, last_position_msg);
     line_strip.points.push_back(last_position_msg);
@@ -226,31 +201,6 @@ void drawVertices(const Vertex::Vector& vertices, const std::string& frame_id,
   header.stamp = ros::Time::now();
   internal::setMarkerProperties(header, 0.0, visualization_msgs::Marker::ADD,
                                 marker_array);
-}
-
-void drawVerticesFromTrajectory(const Trajectory& trajectory,
-                                const std::string& frame_id,
-                                visualization_msgs::MarkerArray* marker_array) {
-  CHECK_NOTNULL(marker_array);
-
-  std::vector<double> segment_times = trajectory.getSegmentTimes();
-  if (segment_times.empty()) {
-    ROS_WARN("Empty trajectory.");
-    return;
-  }
-  Vertex::Vector vertices(segment_times.size() + 1, trajectory.D());
-
-  double trajectory_time = 0.0;
-  for (size_t i = 0; i < segment_times.size(); ++i) {
-    vertices[i] =
-        trajectory.getVertexAtTime(trajectory_time, derivative_order::POSITION);
-    trajectory_time += segment_times[i];
-  }
-
-  // Add final vertex manually to not end up in numeric errors.
-  vertices.back() = trajectory.getGoalVertex(derivative_order::POSITION);
-
-  drawVertices(vertices, frame_id, marker_array);
 }
 
 }  // namespace mav_trajectory_generation

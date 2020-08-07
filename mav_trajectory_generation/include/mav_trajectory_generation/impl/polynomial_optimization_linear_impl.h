@@ -26,7 +26,7 @@
 #include <set>
 #include <tuple>
 
-// fixes error due to std::iota (has been introduced in c++ standard lately
+// fixes error due to std::iota (has been introduced in c++ standard lately 
 // and may cause compilation errors depending on compiler)
 #if __cplusplus <= 199711L
   #include <algorithm>
@@ -341,7 +341,7 @@ bool PolynomialOptimization<_N>::solveLinear() {
         derivative_to_optimize_ <= kHighestDerivativeToOptimize);
   // Catch the fully constrained case:
   if (n_free_constraints_ == 0) {
-    DLOG(WARNING)
+    LOG(WARNING)
         << "No free constraints set in the vertices. Polynomial can "
            "not be optimized. Outputting fully constrained polynomial.";
     updateSegmentsFromCompactConstraints();
@@ -557,6 +557,9 @@ void PolynomialOptimization<_N>::computeQuadraticCostJacobian(
     int derivative, double t, SquareMatrix* cost_jacobian) {
   CHECK_LT(derivative, N);
 
+//  /// By Ram:
+//  std::cout << Polynomial::base_coefficients_ << std::endl;
+
   cost_jacobian->setZero();
   for (int col = 0; col < N - derivative; col++) {
     for (int row = 0; row < N - derivative; row++) {
@@ -566,8 +569,16 @@ void PolynomialOptimization<_N>::computeQuadraticCostJacobian(
           Polynomial::base_coefficients_(derivative, N - 1 - row) *
           Polynomial::base_coefficients_(derivative, N - 1 - col) *
           pow(t, exponent) * 2.0 / exponent;
+
+//      /// By Ram:
+//      std::cout << "Polynomial::base_coefficients_(derivative, N - 1 - row): " << Polynomial::base_coefficients_(derivative, N - 1 - row) << std::endl;
+//      std::cout << "Polynomial::base_coefficients_(derivative, N - 1 - col): " << Polynomial::base_coefficients_(derivative, N - 1 - col) << std::endl;
+//      std::cout << "exponent: " << exponent << std::endl;
+//      std::cout << "(*cost_jacobian)(N - 1 - row, N - 1 - col): " << (*cost_jacobian)(N - 1 - row, N - 1 - col) << std::endl;
     }
   }
+//  /// By Ram:
+//  std::cout << *cost_jacobian << std::endl;
 }
 
 }  // namespace mav_trajectory_generation

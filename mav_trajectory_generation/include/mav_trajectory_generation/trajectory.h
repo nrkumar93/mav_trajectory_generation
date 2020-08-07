@@ -71,6 +71,15 @@ class Trajectory {
     segments_.insert(segments_.end(), segments.begin(), segments.end());
   }
 
+  void popBackSegments(int num_delete = 1)
+  {
+    CHECK_LE(num_delete, segments_.size());
+    for (int i=0; i<num_delete; ++i)
+    {
+      segments_.pop_back();
+    }
+  }
+
   void getSegments(Segment::Vector* segments) const {
     CHECK_NOTNULL(segments);
     *segments = segments_;
@@ -93,21 +102,12 @@ class Trajectory {
   bool addTrajectories(const std::vector<Trajectory>& trajectories,
                        Trajectory* merged) const;
 
-  // Offset this trajectory by vector A_r_B.
-  bool offsetTrajectory(const Eigen::VectorXd& A_r_B);
-
   // Evaluate the vertex constraint at time t.
   Vertex getVertexAtTime(double t, int max_derivative_order) const;
   // Evaluate the vertex constraint at start time.
   Vertex getStartVertex(int max_derivative_order) const;
   // Evaluate the vertex constraint at goal time.
   Vertex getGoalVertex(int max_derivative_order) const;
-  // Evaluate all underlying vertices.
-  bool getVertices(int max_derivative_order_pos, int max_derivative_order_yaw,
-                   Vertex::Vector* pos_vertices,
-                   Vertex::Vector* yaw_vertices) const;
-  bool getVertices(int max_derivative_order,
-                   Vertex::Vector* vertices) const;
 
   // Evaluation functions.
   // Evaluate at a single time, and a single derivative. Return type of
@@ -131,9 +131,6 @@ class Trajectory {
 
   // Compute max velocity and max acceleration. Shorthand for the method above.
   bool computeMaxVelocityAndAcceleration(double* v_max, double* a_max) const;
-
-  // This method SCALES the segment times evenly.
-  bool scaleSegmentTimes(double scaling);
 
   // This method SCALES the segment times evenly to ensure that the trajectory
   // is feasible given the provided v_max and a_max. Does not change the shape

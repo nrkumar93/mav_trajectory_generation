@@ -91,7 +91,9 @@ struct NonlinearOptimizationParameters {
     kMellingerOuterLoop,
     kSquaredTimeAndConstraints,
     kRichterTimeAndConstraints,
-    kUnknown
+    kUnknown,
+    /// By Ram: Old GD stuff
+    kRichterTimeAndConstraintsGD
   } time_alloc_method = kSquaredTimeAndConstraints;
 
   bool print_debug_info = false;
@@ -176,6 +178,11 @@ class PolynomialOptimizationNonLinear {
     poly_opt_.getTrajectory(trajectory);
   }
 
+  // Return the trace of trajectory convergence
+  const std::vector<Trajectory> getTrajectoryTrace() const {
+    return traj_trace_;
+  }
+
   // Returns a const reference to the underlying linear optimization
   // object.
   const PolynomialOptimization<N>& getPolynomialOptimizationRef() const {
@@ -200,6 +207,9 @@ class PolynomialOptimizationNonLinear {
   double getTotalCostWithSoftConstraints() const;
 
   void scaleSegmentTimesWithViolation();
+
+  ///> By Ram:
+  void setInitialGuess(std::vector<double>& init_guess);
 
  private:
   // Holds the data for constraint evaluation, since these methods are
@@ -262,6 +272,13 @@ class PolynomialOptimizationNonLinear {
   // Does the actual optimization work for the full optimization version.
   int optimizeTimeAndFreeConstraints();
 
+  /// By Ram: Old GD stuff
+  int optimizeTimeAndFreeConstraintsRichterGD();
+  double getCostAndGradientTimeForward(std::vector<double>* gradients);
+  double getCostAndGradientDerivative(std::vector<Eigen::VectorXd>* gradients);
+  double getCostAndGradientSoftConstraintsForward(
+          std::vector<Eigen::VectorXd>* gradients);
+
   // Evaluates the maximum magnitude constraints as soft constraints and
   // returns a cost, depending on the violation of the constraints.
   // cost_i = min(maximum_cost, exp(abs_violation_i / max_allowed_i * weight))
@@ -302,6 +319,12 @@ class PolynomialOptimizationNonLinear {
   std::vector<std::shared_ptr<ConstraintData> > inequality_constraints_;
 
   OptimizationInfo optimization_info_;
+
+  // Logging all the trajectories until convergence
+  std::vector<Trajectory> traj_trace_;
+
+  ///> By Ram:
+  std::vector<double> initial_guess_;
 };
 
 }  // namespace mav_trajectory_generation
